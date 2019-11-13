@@ -161,6 +161,29 @@ install_files() {
   sudo install -m 755 ${files_dir}/resizefs.sh \
       ${rootfs_dir}/usr/sbin/resizefs.sh
 
+  # Add the AWS IoT Jobs agent that integrates with mender
+  # Add it as a service so that it gets started on boot
+  
+  sudo install -m 644 ${files_dir}/goagent.service \
+    ${rootfs_dir}/lib/systemd/system/goagent.service
+  sudo ln -sf /lib/systemd/system/goagent.service \
+    ${rootfs_dir}/etc/systemd/system/multi-user.target.wants/goagent.service
+  sudo install -m 755 ${files_dir}/goagent \
+    ${rootfs_dir}/usr/sbin/goagent
+    
+  # Add the certificates needed to connect to AWS IoT Core
+  
+  sudo install -D -m 444 ${files_dir}/rootCA.pem \
+    ${rootfs_dir}/etc/goagent/rootCA.pem
+  sudo install -D -m 444 ${files_dir}/cert.pem \
+    ${rootfs_dir}/etc/goagent/cert.pem
+  sudo install -D -m 400 ${files_dir}/private.key \
+    ${rootfs_dir}/etc/goagent/private.key
+    
+  # Enable SSH 
+  sudo ln -sf /lib/systemd/system/ssh.service \
+     ${rootfs_dir}/etc/systemd/system/multi-user.target.wants/ssh.service
+
   # Remove original 'resize2fs_once' script and its symbolic link.
   sudo unlink ${rootfs_dir}/etc/rc3.d/S01resize2fs_once
   sudo rm ${rootfs_dir}/etc/init.d/resize2fs_once
