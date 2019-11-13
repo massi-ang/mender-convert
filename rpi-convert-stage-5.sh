@@ -14,6 +14,9 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+## angmas 2019-10-28
+# Removed resize command to use tool with buildroot
+
 application_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 files_dir=${application_dir}/files
 output_dir=${application_dir}/output
@@ -94,7 +97,7 @@ build_uboot_files() {
 install_files() {
   local boot_dir=$1
   local rootfs_dir=$2
-  local kernel_img="kernel7.img"
+  local kernel_img="zImage"
 
   if [ "${device_type}" == "raspberrypi0w" ]; then
     kernel_img="kernel.img"
@@ -102,31 +105,14 @@ install_files() {
 
   log "\tInstalling U-Boot related files."
 
-  # Make a copy of Linux kernel arguments and modify.
-  sudo cp ${boot_dir}/cmdline.txt ${output_dir}/cmdline.txt
-
-  sed -i 's/\b[ ]root=[^ ]*/ root=\${mender_kernel_root}/' ${output_dir}/cmdline.txt
-
-  # Original Raspberry Pi image run once will have init_resize.sh script removed
-  # from the init argument from the cmdline.
-  #
-  # On the other hand in Mender image we want to retain a mechanism of last
-  # partition resizing. Check the cmdline.txt file and add it back if necessary.
-  if ! grep -q "init=/usr/lib/raspi-config/init_resize.sh" ${output_dir}/cmdline.txt; then
-    cmdline=$(cat ${output_dir}/cmdline.txt)
-    sh -c -e "echo '${cmdline} init=/usr/lib/raspi-config/init_resize.sh' > ${output_dir}/cmdline.txt";
-  fi
-
-  # Update Linux kernel command arguments with our custom configuration
-  sudo cp ${output_dir}/cmdline.txt ${boot_dir}
-
+  
   # Mask udisks2.service, otherwise it will mount the inactive part and we
   # might write an update while it is mounted which often result in
   # corruptions.
   #
   # TODO: Find a way to only blacklist mmcblk0pX devices instead of masking
   # the service.
-  sudo ln -sf /dev/null ${rootfs_dir}/etc/systemd/system/udisks2.service
+  # sudo ln -sf /dev/null ${rootfs_dir}/etc/systemd/system/udisks2.service
 
   # Extract Linux kernel and install to /boot directory on rootfs
   sudo cp ${boot_dir}/${kernel_img} ${rootfs_dir}/boot/zImage
@@ -145,25 +131,6 @@ install_files() {
 
   sudo install -m 755 ${bin_dir_pi}/fw_printenv ${rootfs_dir}/sbin/fw_printenv
   sudo ln -fs /sbin/fw_printenv ${rootfs_dir}/sbin/fw_setenv
-
-  # Override init script to expand the data partition instead of rootfs, which it
-  # normally expands in standard Raspberry Pi distributions.
-  sudo install -m 755 ${files_dir}/init_resize.sh \
-      ${rootfs_dir}/usr/lib/raspi-config/init_resize.sh
-
-  # As the whole process must be conducted in two steps, i.e. resize partition
-  # during first boot and resize the partition's file system on system's first
-  # start-up add systemd service file and script.
-  sudo install -m 644 ${files_dir}/resizefs.service \
-      ${rootfs_dir}/lib/systemd/system/resizefs.service
-  sudo ln -sf /lib/systemd/system/resizefs.service \
-      ${rootfs_dir}/etc/systemd/system/multi-user.target.wants/resizefs.service
-  sudo install -m 755 ${files_dir}/resizefs.sh \
-      ${rootfs_dir}/usr/sbin/resizefs.sh
-
-  # Remove original 'resize2fs_once' script and its symbolic link.
-  sudo unlink ${rootfs_dir}/etc/rc3.d/S01resize2fs_once
-  sudo rm ${rootfs_dir}/etc/init.d/resize2fs_once
 }
 
 do_install_bootloader() {
